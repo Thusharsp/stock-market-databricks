@@ -18,6 +18,7 @@ try:
     if not response.ok:
         print(f"HTTP Error: {response.status_code}")
         print(response.text)
+        print("refused to connect")
     else:
         # 2. Parse the JSON response
         try:
