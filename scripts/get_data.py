@@ -1,52 +1,64 @@
 import requests
 import json
+from pathlib import Path
+import base64
+from databricks.sdk import WorkspaceClient
 
+# Connect to Databricks and retrieve the secret
+w = WorkspaceClient(profile="DEFAULT")
+
+secret = w.secrets.get_secret(
+    scope="sm_api_secret_key",
+    key="twelve-data-api-key"
+)
+
+api_key = base64.b64decode(secret.value).decode("utf-8").strip()
+
+# Twelve Data API
 URL = "https://api.twelvedata.com/time_series"
 
-payload = {
-    "symbol" : "AAPL",
-    "interval" : "1day",
-    "apikey" : "f8a206c64585466fad5387eb02126054"
+params = {
+    "symbol": "AAPL",
+    "interval": "1day",
+    "outputsize": 5,
+    "apikey": api_key
 }
 
-file_path = "output/response_json.json"   
+file_path = Path("output/response_json.json")
 
 try:
-    response = requests.get(URL, params=payload, timeout=30)
+    response = requests.get(URL, params=params, timeout=30)
+    response.raise_for_status()
 
-    # 1. Check HTTP status code
-    if not response.ok:
-        print(f"HTTP Error: {response.status_code}")
-        print(response.text)
-        print("refused to connect")
+    data = response.json()
+
+    if data.get("status") == "error":
+        print("Twelve Data API Error:", data.get("message"))
+        print("Error code:", data.get("code"))
+
+    elif "values" not in data:
+        print("Unexpected API response:", json.dumps(data, indent=4))
+
     else:
-        # 2. Parse the JSON response
-        try:
-            data = response.json()
-        except requests.exceptions.JSONDecodeError:
-            print("Error: Response is not valid JSON.")
-            raise SystemExit
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 3. Check for an API-level error
-        if data.get("status") == "error" or "code" in data and "message" in data and "values" not in data:
-            print("API Error:", data.get("message", "Unknown API error"))
-            print("Error code:", data.get("code"))
+        with file_path.open("w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
 
-        # 4. Check that expected data exists
-        elif "values" not in data:
-            print("Unexpected response:", json.dumps(data, indent=4))
-
-        else:
-            data = response.json()
-            with open(file_path, "w", encoding="utf-8") as file:
-                json.dump(data, file, ensure_ascii=False)
-            print("Data retrieved successfully!")
+        print("Data retrieved successfully!")
+        print(f"Stock: {data['meta']['symbol']}")
+        print(f"Records received: {len(data['values'])}")
+        print(f"Saved to: {file_path}")
 
 except requests.exceptions.Timeout:
     print("Error: The API request timed out.")
+
+except requests.exceptions.HTTPError as e:
+    print(f"HTTP error: {e}")
 
 except requests.exceptions.ConnectionError:
     print("Error: Could not connect to Twelve Data.")
 
 except requests.exceptions.RequestException as e:
-    print("Request error:", e)
+    print(f"Request error: {e}")
+
