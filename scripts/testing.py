@@ -1,21 +1,7 @@
-import requests
-import base64
-from databricks.sdk import WorkspaceClient
+from databricks.connect import DatabricksSession
 
-w = WorkspaceClient(profile="DEFAULT")
+spark = DatabricksSession.builder.serverless().getOrCreate()
 
-secret = w.secrets.get_secret(
-    scope="sm_api_secret_key",
-    key="twelve-data-api-key"
-)
+print(spark.range(5).collect())
 
-api_key = secret.value.strip()
-api = base64.b64decode(secret.value).decode("utf-8").strip()
-
-print(api)
-print(api_key)
-#
-# print(api_key)response = requests.get("https://api.twelvedata.com/price",params={"symbol": "AAPL", "apikey": api_key},timeout=30)
-#
-# print(api_key)print("HTTP status:", response.status_code)
-#print("Response:", response.text)
+spark.stop()
